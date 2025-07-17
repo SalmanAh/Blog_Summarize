@@ -161,9 +161,9 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen flex flex-col text-foreground transition-colors duration-700 bg-neutral-950"
+      className="min-h-screen flex flex-col text-foreground transition-colors duration-700 bg-transparent"
     >
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 md:py-20 bg-neutral-950">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 md:py-20 bg-transparent">
         {/* Hero/Intro Section */}
         <section className="w-full max-w-2xl mx-auto text-center mb-12">
           <div className="flex flex-col items-center gap-4">
