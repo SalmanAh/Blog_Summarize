@@ -10,6 +10,8 @@ import { motion, AnimatePresence } from "framer-motion"
 // 1. Import and initialize Supabase client
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
+import { TypingAnimation } from "@/components/magicui/typing-animation";
+import FlippingCard from '../components/ui/flipping-card';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -23,19 +25,13 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState("summary")
-  // Theme toggle state
-  const [theme, setTheme] = useState("dark")
   const router = useRouter()
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      document.documentElement.classList.toggle("dark", theme === "dark")
+      document.documentElement.classList.toggle("dark", true) // Force dark mode
     }
-  }, [theme])
-
-  const toggleTheme = () => {
-    setTheme(theme === "light" ? "dark" : "light")
-  }
+  }, [])
 
   // Use environment variables for Gemini API key and endpoint
   const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; // Set in .env.local
@@ -74,6 +70,28 @@ export default function Home() {
       const geminiData = await geminiRes.json()
       const summaryText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "No summary returned."
 
+      // 2b. Get detailed English description
+      const detailEnRes = await fetch(GEMINI_ENDPOINT + `?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Provide a detailed explanation of this blog post in clear, descriptive English:\n\n${plainText}`
+                }
+              ]
+            }
+          ]
+        })
+      })
+      if (!detailEnRes.ok) throw new Error("Failed to get English detail from Gemini")
+      const detailEnData = await detailEnRes.json()
+      const detailEnText = detailEnData?.candidates?.[0]?.content?.parts?.[0]?.text || "No English detail returned."
+      //cls
+      // console.log('English Detail:', detailEnText)
+
       // 3. Send the English summary to Gemini for Urdu translation
       const urduRes = await fetch(GEMINI_ENDPOINT + `?key=${GEMINI_API_KEY}`, {
         method: "POST",
@@ -94,7 +112,28 @@ export default function Home() {
       const urduData = await urduRes.json()
       const urduText = urduData?.candidates?.[0]?.content?.parts?.[0]?.text || "No Urdu translation returned."
 
-      setSummary({ summary: summaryText, urdu: urduText })
+      // 3b. Translate the English detail to Urdu
+      const detailUrRes = await fetch(GEMINI_ENDPOINT + `?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Translate the following detailed explanation into Urdu (keep it descriptive and clear):\n\n${detailEnText}`
+                }
+              ]
+            }
+          ]
+        })
+      })
+      if (!detailUrRes.ok) throw new Error("Failed to get Urdu detail from Gemini")
+      const detailUrData = await detailUrRes.json()
+      const detailUrText = detailUrData?.candidates?.[0]?.content?.parts?.[0]?.text || "No Urdu detail returned."
+      console.log('Urdu Detail:', detailUrText)
+
+      setSummary({ summary: summaryText, urdu: urduText, detailEn: detailEnText, detailUr: detailUrText })
 
       // Insert into Supabase
       const { error: supabaseError } = await supabase
@@ -103,7 +142,9 @@ export default function Home() {
           {
             URL: url,
             S_En: summaryText,
-            S_Ur: urduText
+            S_Ur: urduText,
+            Eng_Detail: detailEnText,
+            Ur_Detail: detailUrText
           }
         ])
       if (supabaseError) {
@@ -115,34 +156,53 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
+
   }
 
   return (
     <div
-      className="min-h-screen flex flex-col text-foreground transition-colors duration-700 bg-slate-300 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-800 dark:to-slate-900"
+      className="min-h-screen flex flex-col text-foreground transition-colors duration-700 bg-neutral-950"
     >
-      {/* Floating theme toggle button */}
-      <button
-        aria-label="Toggle theme"
-        onClick={toggleTheme}
-        className="fixed top-5 right-5 z-50 p-2 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-300"
-      >
-        {theme === "dark" ? (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m8.66-13.66l-.71.71M4.05 19.07l-.71.71M21 12h-1M4 12H3m16.66 5.66l-.71-.71M4.05 4.93l-.71-.71M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" /></svg>
-        )}
-      </button>
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 md:py-20">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 md:py-20 bg-neutral-950">
+        {/* Hero/Intro Section */}
+        <section className="w-full max-w-2xl mx-auto text-center mb-12">
+          <div className="flex flex-col items-center gap-4">
+            <TypingAnimation className="text-4xl md:text-5xl font-extrabold font-sans tracking-tight drop-shadow-lg bg-gradient-to-r from-blue-800 to-cyan-600 bg-clip-text text-transparent dark:from-blue-800 dark:to-cyan-400 mb-2">AI Blog Summarizer</TypingAnimation>
+            <p className="text-lg md:text-xl text-slate-700 dark:text-slate-300 max-w-xl mx-auto">Summarize any blog post instantly in clear English and Urdu. Powered by Google Gemini AI and Supabase. Save, view, and share your summaries with ease!</p>
+          </div>
+        </section>
+        {/* How it works section - use FlippingCard */}
+        <section className="mt-16">
+          <h2 className="text-4xl font-bold mb-8 text-center">How it works</h2>
+          <div className="flex flex-col md:flex-row gap-8 justify-center items-center">
+            <FlippingCard
+              number={1}
+              icon={<svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>}
+              title="Paste Blog"
+              detail="Paste your blog content into the input box to get started."
+              badge="Step 1"
+              footer="Easy start"
+            />
+            <FlippingCard
+              number={2}
+              icon={<svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>}
+              title="Summarize"
+              detail="Click Summarize and let the AI generate concise summaries in English and Urdu."
+              badge="Step 2"
+              footer="AI powered"
+            />
+            <FlippingCard
+              number={3}
+              icon={<svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>}
+              title="View & Copy"
+              detail="View your summaries and copy them for use anywhere you like."
+              badge="Step 3"
+              footer="Save & share"
+            />
+          </div>
+        </section>
+        <div className="mt-20" />
         <div className="w-full max-w-xl space-y-10">
-          <motion.h1
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, type: 'spring' }}
-            className={`text-4xl md:text-5xl font-extrabold font-sans tracking-tight text-center mb-10 drop-shadow-lg ${typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'bg-gradient-to-r from-blue-800 to-cyan-600 bg-clip-text text-transparent' : 'bg-gradient-to-r from-blue-600 to-cyan-400 bg-clip-text text-transparent'}`}
-          >
-            AI Blog Summariser
-          </motion.h1>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -156,32 +216,29 @@ export default function Home() {
               onChange={e => setUrl(e.target.value)}
               disabled={loading}
             />
+            <div className="flex items-center">
             <Button
-              className="w-full md:w-auto px-6 py-2 rounded-lg font-semibold text-lg bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 shadow-lg transition-all duration-300 focus:ring-2 focus:ring-blue-300 dark:focus:ring-cyan-800 active:scale-95 active:shadow-md text-black dark:text-white"
               onClick={handleSubmit}
               disabled={loading || !url}
               type="button"
-              style={{ transition: 'all 0.25s cubic-bezier(.4,0,.2,1)' }}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-cyan-400" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /></svg>
-                  Summarising...
-                </span>
-              ) : (
-                "Summarise"
-              )}
+              >
+                {loading ? "Summarising..." : "Summarise"}
             </Button>
+            </div>
           </motion.div>
-          <div className="flex justify-center mt-4">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+            className="flex justify-center mt-4"
+          >
             <Button
-              className="px-6 py-2 rounded-lg font-semibold text-lg bg-gradient-to-r from-slate-700 to-blue-500 hover:from-blue-600 hover:to-cyan-500 shadow-md transition-all duration-300 text-white"
               onClick={() => router.push('/summaries')}
               type="button"
             >
               View All Summaries
             </Button>
-          </div>
+          </motion.div>
           {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-center font-semibold drop-shadow">{error}</motion.p>}
 
           <AnimatePresence>
@@ -232,6 +289,22 @@ export default function Home() {
                       </CardContent>
                     </Card>
                   </div>
+                  {/* English detail card */}
+                  {summary.detailEn && (
+                    <div className="relative w-full">
+                      <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-blue-100 via-cyan-50 to-slate-100 dark:from-blue-800 dark:via-cyan-800 dark:to-slate-800 blur-lg opacity-30 hover:opacity-60 hover:blur-xl transition-all duration-500 animate-tilt" />
+                      <Card className="relative bg-slate-50/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-blue-200/40 dark:hover:shadow-blue-900/40 hover:scale-[1.015] flex flex-col">
+                        <CardHeader>
+                          <CardTitle className="text-2xl font-bold font-sans tracking-tight drop-shadow text-slate-800 dark:text-white flex justify-center text-center">English Detail</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-center">
+                          <div className="whitespace-pre-line text-base leading-relaxed text-slate-700 dark:text-slate-200 transition-colors duration-300">
+                            {summary.detailEn}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                   {/* Urdu summary card */}
                   {summary.urdu && (
                     <div className="relative w-full">
@@ -243,6 +316,22 @@ export default function Home() {
                         <CardContent className="flex-1 flex flex-col justify-center">
                           <div className="whitespace-pre-line text-lg leading-relaxed text-right font-noto text-slate-700 dark:text-slate-200 transition-colors duration-300">
                             {summary.urdu}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                  {/* Urdu detail card */}
+                  {summary.detailUr && (
+                    <div className="relative w-full">
+                      <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-50 via-blue-50 to-slate-100 dark:from-cyan-800 dark:via-blue-800 dark:to-slate-800 blur-lg opacity-30 hover:opacity-60 hover:blur-xl transition-all duration-500 animate-tilt" />
+                      <Card className="relative bg-slate-50/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl overflow-hidden transition-all duration-500 hover:shadow-cyan-200/40 dark:hover:shadow-cyan-900/40 hover:scale-[1.015] flex flex-col">
+                        <CardHeader>
+                          <CardTitle className="text-2xl font-bold font-sans tracking-tight drop-shadow text-slate-800 dark:text-white flex justify-center text-center">Urdu Detail</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-center">
+                          <div className="whitespace-pre-line text-lg leading-relaxed text-right font-noto text-slate-700 dark:text-slate-200 transition-colors duration-300">
+                            {summary.detailUr}
                           </div>
                         </CardContent>
                       </Card>

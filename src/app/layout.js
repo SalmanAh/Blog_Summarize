@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,6 +23,16 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Animated grid background */}
+        <div className="fixed inset-0 -z-10 pointer-events-none select-none">
+          <AnimatedGridPattern
+            numSquares={30}
+            maxOpacity={0.08}
+            duration={3}
+            repeatDelay={1}
+            className="w-full h-full [mask-image:radial-gradient(800px_circle_at_center,white,transparent)] skew-y-6"
+          />
+        </div>
         {children}
       </body>
     </html>
